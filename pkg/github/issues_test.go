@@ -122,6 +122,137 @@ func Test_GetIssue(t *testing.T) {
 	}
 }
 
+func Test_CreateMilestone(t *testing.T) {
+	// Verify tool definition once
+	mockClient := github.NewClient(nil)
+	tool, _ := CreateMilestone(stubGetClientFn(mockClient), translations.NullTranslationHelper)
+	require.NoError(t, toolsnaps.Test(tool.Name, tool))
+
+	assert.Equal(t, "create_milestone", tool.Name)
+	assert.NotEmpty(t, tool.Description)
+	assert.Contains(t, tool.InputSchema.Properties, "owner")
+	assert.Contains(t, tool.InputSchema.Properties, "repo")
+	assert.Contains(t, tool.InputSchema.Properties, "title")
+	assert.Contains(t, tool.InputSchema.Properties, "state")
+	assert.Contains(t, tool.InputSchema.Properties, "description")
+	assert.Contains(t, tool.InputSchema.Properties, "due_on")
+	assert.ElementsMatch(t, tool.InputSchema.Required, []string{"owner", "repo", "title"})
+
+	// Setup mock milestone for success case
+	dueOn, _ := time.Parse(time.RFC3339, "2025-01-01T00:00:00Z")
+	mockMilestone := &github.Milestone{
+		Number:      github.Ptr(1),
+		Title:       github.Ptr("Test Milestone"),
+		Description: github.Ptr("This is a test milestone"),
+		State:       github.Ptr("open"),
+		HTMLURL:     github.Ptr("https://github.com/owner/repo/milestones/1"),
+		DueOn:       &github.Timestamp{Time: dueOn},
+	}
+
+	tests := []struct {
+		name              string
+		mockedClient      *http.Client
+		requestArgs       map[string]interface{}
+		expectError       bool
+		expectedMilestone *github.Milestone
+		expectedErrMsg    string
+	}{
+		{
+			name: "successful milestone creation with all fields",
+			mockedClient: mock.NewMockedHTTPClient(
+				mock.WithRequestMatchHandler(
+					mock.PostReposMilestonesByOwnerByRepo,
+					expectRequestBody(t, map[string]any{
+						"title":       "Test Milestone",
+						"state":       "open",
+						"description": "This is a test milestone",
+						"due_on":      "2025-01-01T00:00:00Z",
+					}).andThen(
+						mockResponse(t, http.StatusCreated, mockMilestone),
+					),
+				),
+			),
+			requestArgs: map[string]interface{}{
+				"owner":       "owner",
+				"repo":        "repo",
+				"title":       "Test Milestone",
+				"state":       "open",
+				"description": "This is a test milestone",
+				"due_on":      "2025-01-01T00:00:00Z",
+			},
+			expectError:       false,
+			expectedMilestone: mockMilestone,
+		},
+		{
+			name: "milestone creation fails",
+			mockedClient: mock.NewMockedHTTPClient(
+				mock.WithRequestMatchHandler(
+					mock.PostReposMilestonesByOwnerByRepo,
+					http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+						w.WriteHeader(http.StatusUnprocessableEntity)
+						_, _ = w.Write([]byte(`{"message": "Validation failed"}`))
+					}),
+				),
+			),
+			requestArgs: map[string]interface{}{
+				"owner": "owner",
+				"repo":  "repo",
+				"title": "",
+			},
+			expectError:    false,
+			expectedErrMsg: "missing required parameter: title",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Setup client with mock
+			client := github.NewClient(tc.mockedClient)
+			_, handler := CreateMilestone(stubGetClientFn(client), translations.NullTranslationHelper)
+
+			// Create call request
+			request := createMCPRequest(tc.requestArgs)
+
+			// Call handler
+			result, err := handler(context.Background(), request)
+
+			// Verify results
+			if tc.expectError {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tc.expectedErrMsg)
+				return
+			}
+
+			if tc.expectedErrMsg != "" {
+				require.NotNil(t, result)
+				textContent := getTextResult(t, result)
+				assert.Contains(t, textContent.Text, tc.expectedErrMsg)
+				return
+			}
+
+			require.NoError(t, err)
+			textContent := getTextResult(t, result)
+
+			// Unmarshal and verify the result
+			var returnedMilestone github.Milestone
+			err = json.Unmarshal([]byte(textContent.Text), &returnedMilestone)
+			require.NoError(t, err)
+
+			assert.Equal(t, *tc.expectedMilestone.Number, *returnedMilestone.Number)
+			assert.Equal(t, *tc.expectedMilestone.Title, *returnedMilestone.Title)
+			assert.Equal(t, *tc.expectedMilestone.State, *returnedMilestone.State)
+			assert.Equal(t, *tc.expectedMilestone.HTMLURL, *returnedMilestone.HTMLURL)
+
+			if tc.expectedMilestone.Description != nil {
+				assert.Equal(t, *tc.expectedMilestone.Description, *returnedMilestone.Description)
+			}
+			if tc.expectedMilestone.DueOn != nil {
+				assert.Equal(t, tc.expectedMilestone.DueOn.Time.UTC(), returnedMilestone.DueOn.Time.UTC())
+			}
+		})
+	}
+}
+
 func Test_AddIssueComment(t *testing.T) {
 	// Verify tool definition once
 	mockClient := github.NewClient(nil)
