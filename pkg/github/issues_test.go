@@ -136,7 +136,7 @@ func Test_CreateMilestone(t *testing.T) {
 	assert.Contains(t, tool.InputSchema.Properties, "state")
 	assert.Contains(t, tool.InputSchema.Properties, "description")
 	assert.Contains(t, tool.InputSchema.Properties, "due_on")
-	assert.ElementsMatch(t, tool.InputSchema.Required, []string{"owner", "repo", "title"})
+	assert.ElementsMatch(t, tool.InputSchema.Required, []string{"owner", "repo", "title", "state"})
 
 	// Setup mock milestone for success case
 	dueOn, _ := time.Parse(time.RFC3339, "2025-01-01T00:00:00Z")

@@ -227,6 +227,7 @@ func CreateMilestone(getClient GetClientFn, t translations.TranslationHelperFunc
 				mcp.Description("Milestone title"),
 			),
 			mcp.WithString("state",
+				mcp.Required(),
 				mcp.Description("Milestone state"),
 				mcp.Enum("open", "closed"),
 			),

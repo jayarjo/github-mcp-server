@@ -38,7 +38,8 @@
     "required": [
       "owner",
       "repo",
-      "title"
+      "title",
+      "state"
     ],
     "type": "object"
   },
