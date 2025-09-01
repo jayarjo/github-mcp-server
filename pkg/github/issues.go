@@ -206,6 +206,115 @@ func GetIssue(getClient GetClientFn, t translations.TranslationHelperFunc) (tool
 		}
 }
 
+// EditMilestone creates a tool to edit an existing milestone in a GitHub repository.
+func EditMilestone(getClient GetClientFn, t translations.TranslationHelperFunc) (tool mcp.Tool, handler server.ToolHandlerFunc) {
+	return mcp.NewTool("edit_milestone",
+			mcp.WithDescription(t("TOOL_EDIT_MILESTONE_DESCRIPTION", "Edit an existing milestone in a GitHub repository.")),
+			mcp.WithToolAnnotation(mcp.ToolAnnotation{
+				Title:        t("TOOL_EDIT_MILESTONE_USER_TITLE", "Edit milestone"),
+				ReadOnlyHint: ToBoolPtr(false),
+			}),
+			mcp.WithString("owner",
+				mcp.Required(),
+				mcp.Description("Repository owner"),
+			),
+			mcp.WithString("repo",
+				mcp.Required(),
+				mcp.Description("Repository name"),
+			),
+			mcp.WithNumber("milestone_number",
+				mcp.Required(),
+				mcp.Description("The number of the milestone to edit"),
+			),
+			mcp.WithString("title",
+				mcp.Description("New milestone title"),
+			),
+			mcp.WithString("state",
+				mcp.Description("New milestone state"),
+				mcp.Enum("open", "closed"),
+			),
+			mcp.WithString("description",
+				mcp.Description("New milestone description"),
+			),
+			mcp.WithString("due_on",
+				mcp.Description("New milestone due date in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)"),
+			),
+		),
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			owner, err := RequiredParam[string](request, "owner")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			repo, err := RequiredParam[string](request, "repo")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			milestoneNumber, err := RequiredInt(request, "milestone_number")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+
+			milestoneRequest := &github.Milestone{}
+
+			if title, ok, err := OptionalParamOK[string](request, "title"); err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			} else if ok {
+				milestoneRequest.Title = &title
+			}
+
+			if state, ok, err := OptionalParamOK[string](request, "state"); err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			} else if ok {
+				milestoneRequest.State = &state
+			}
+
+			if description, ok, err := OptionalParamOK[string](request, "description"); err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			} else if ok {
+				milestoneRequest.Description = &description
+			}
+
+			if dueOn, ok, err := OptionalParamOK[string](request, "due_on"); err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			} else if ok {
+				if dueOn != "" {
+					dueOnTime, err := time.Parse(time.RFC3339, dueOn)
+					if err != nil {
+						return mcp.NewToolResultError(fmt.Sprintf("invalid due_on format: %v", err)), nil
+					}
+					milestoneRequest.DueOn = &github.Timestamp{Time: dueOnTime}
+				} else {
+					milestoneRequest.DueOn = &github.Timestamp{}
+				}
+			}
+
+			client, err := getClient(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get GitHub client: %w", err)
+			}
+			milestone, resp, err := client.Issues.EditMilestone(ctx, owner, repo, milestoneNumber, milestoneRequest)
+			if err != nil {
+				return nil, fmt.Errorf("failed to edit milestone: %w", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+
+			if resp.StatusCode != http.StatusOK {
+				body, err := io.ReadAll(resp.Body)
+				if err != nil {
+					return nil, fmt.Errorf("failed to read response body: %w", err)
+				}
+				return mcp.NewToolResultError(fmt.Sprintf("failed to edit milestone: %s", string(body))), nil
+			}
+
+			r, err := json.Marshal(milestone)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal response: %w", err)
+			}
+
+			return mcp.NewToolResultText(string(r)), nil
+		}
+}
+
 // CreateMilestone creates a tool to create a new milestone in a GitHub repository.
 func CreateMilestone(getClient GetClientFn, t translations.TranslationHelperFunc) (tool mcp.Tool, handler server.ToolHandlerFunc) {
 	return mcp.NewTool("create_milestone",

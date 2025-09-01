@@ -536,6 +536,23 @@ The following sets of tools are available (all are on by default):
   - `title`: Issue title (string, required)
   - `type`: Type of this issue (string, optional)
 
+- **create_milestone** - Create new milestone
+  - `description`: Milestone description (string, optional)
+  - `due_on`: Milestone due date in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ) (string, optional)
+  - `owner`: Repository owner (string, required)
+  - `repo`: Repository name (string, required)
+  - `state`: Milestone state (string, required)
+  - `title`: Milestone title (string, required)
+
+- **edit_milestone** - Edit milestone
+  - `description`: New milestone description (string, optional)
+  - `due_on`: New milestone due date in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ) (string, optional)
+  - `milestone_number`: The number of the milestone to edit (number, required)
+  - `owner`: Repository owner (string, required)
+  - `repo`: Repository name (string, required)
+  - `state`: New milestone state (string, optional)
+  - `title`: New milestone title (string, optional)
+
 - **get_issue** - Get issue details
   - `issue_number`: The number of the issue (number, required)
   - `owner`: The owner of the repository (string, required)
