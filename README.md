@@ -553,6 +553,11 @@ The following sets of tools are available (all are on by default):
   - `state`: New milestone state (string, optional)
   - `title`: New milestone title (string, optional)
 
+- **delete_milestone** - Delete milestone
+  - `milestone_number`: The number of the milestone to delete (number, required)
+  - `owner`: Repository owner (string, required)
+  - `repo`: Repository name (string, required)
+
 - **get_issue** - Get issue details
   - `issue_number`: The number of the issue (number, required)
   - `owner`: The owner of the repository (string, required)

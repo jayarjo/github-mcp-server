@@ -122,6 +122,99 @@ func Test_GetIssue(t *testing.T) {
 	}
 }
 
+func Test_DeleteMilestone(t *testing.T) {
+	// Verify tool definition once
+	mockClient := github.NewClient(nil)
+	tool, _ := DeleteMilestone(stubGetClientFn(mockClient), translations.NullTranslationHelper)
+	require.NoError(t, toolsnaps.Test(tool.Name, tool))
+
+	assert.Equal(t, "delete_milestone", tool.Name)
+	assert.NotEmpty(t, tool.Description)
+	assert.Contains(t, tool.InputSchema.Properties, "owner")
+	assert.Contains(t, tool.InputSchema.Properties, "repo")
+	assert.Contains(t, tool.InputSchema.Properties, "milestone_number")
+	assert.ElementsMatch(t, tool.InputSchema.Required, []string{"owner", "repo", "milestone_number"})
+
+	tests := []struct {
+		name           string
+		mockedClient   *http.Client
+		requestArgs    map[string]interface{}
+		expectError    bool
+		expectedResult string
+		expectedErrMsg string
+	}{
+		{
+			name: "successful milestone deletion",
+			mockedClient: mock.NewMockedHTTPClient(
+				mock.WithRequestMatchHandler(
+					mock.DeleteReposMilestonesByOwnerByRepoByMilestoneNumber,
+					http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+						w.WriteHeader(http.StatusNoContent)
+					}),
+				),
+			),
+			requestArgs: map[string]interface{}{
+				"owner":            "owner",
+				"repo":             "repo",
+				"milestone_number": float64(1),
+			},
+			expectError:    false,
+			expectedResult: "milestone deleted successfully",
+		},
+		{
+			name: "milestone deletion fails",
+			mockedClient: mock.NewMockedHTTPClient(
+				mock.WithRequestMatchHandler(
+					mock.DeleteReposMilestonesByOwnerByRepoByMilestoneNumber,
+					http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+						w.WriteHeader(http.StatusNotFound)
+						_, _ = w.Write([]byte(`{"message": "Milestone not found"}`))
+					}),
+				),
+			),
+			requestArgs: map[string]interface{}{
+				"owner":            "owner",
+				"repo":             "repo",
+				"milestone_number": float64(999),
+			},
+			expectError:    true,
+			expectedErrMsg: "failed to delete milestone",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Setup client with mock
+			client := github.NewClient(tc.mockedClient)
+			_, handler := DeleteMilestone(stubGetClientFn(client), translations.NullTranslationHelper)
+
+			// Create call request
+			request := createMCPRequest(tc.requestArgs)
+
+			// Call handler
+			result, err := handler(context.Background(), request)
+
+			// Verify results
+			if tc.expectError {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tc.expectedErrMsg)
+				return
+			}
+
+			if tc.expectedErrMsg != "" {
+				require.NotNil(t, result)
+				textContent := getTextResult(t, result)
+				assert.Contains(t, textContent.Text, tc.expectedErrMsg)
+				return
+			}
+
+			require.NoError(t, err)
+			textContent := getTextResult(t, result)
+			assert.Equal(t, tc.expectedResult, textContent.Text)
+		})
+	}
+}
+
 func Test_EditMilestone(t *testing.T) {
 	// Verify tool definition once
 	mockClient := github.NewClient(nil)
