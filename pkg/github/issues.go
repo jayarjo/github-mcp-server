@@ -416,6 +416,64 @@ func CreateMilestone(getClient GetClientFn, t translations.TranslationHelperFunc
 		}
 }
 
+// DeleteMilestone creates a tool to delete a milestone from a GitHub repository.
+func DeleteMilestone(getClient GetClientFn, t translations.TranslationHelperFunc) (tool mcp.Tool, handler server.ToolHandlerFunc) {
+	return mcp.NewTool("delete_milestone",
+			mcp.WithDescription(t("TOOL_DELETE_MILESTONE_DESCRIPTION", "Delete a milestone from a GitHub repository.")),
+			mcp.WithToolAnnotation(mcp.ToolAnnotation{
+				Title:        t("TOOL_DELETE_MILESTONE_USER_TITLE", "Delete milestone"),
+				ReadOnlyHint: ToBoolPtr(false),
+			}),
+			mcp.WithString("owner",
+				mcp.Required(),
+				mcp.Description("Repository owner"),
+			),
+			mcp.WithString("repo",
+				mcp.Required(),
+				mcp.Description("Repository name"),
+			),
+			mcp.WithNumber("milestone_number",
+				mcp.Required(),
+				mcp.Description("The number of the milestone to delete"),
+			),
+		),
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			owner, err := RequiredParam[string](request, "owner")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			repo, err := RequiredParam[string](request, "repo")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			milestoneNumber, err := RequiredInt(request, "milestone_number")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+
+			client, err := getClient(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get GitHub client: %w", err)
+			}
+
+			resp, err := client.Issues.DeleteMilestone(ctx, owner, repo, milestoneNumber)
+			if err != nil {
+				return nil, fmt.Errorf("failed to delete milestone: %w", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+
+			if resp.StatusCode != http.StatusNoContent {
+				body, err := io.ReadAll(resp.Body)
+				if err != nil {
+					return nil, fmt.Errorf("failed to read response body: %w", err)
+				}
+				return mcp.NewToolResultError(fmt.Sprintf("failed to delete milestone: %s", string(body))), nil
+			}
+
+			return mcp.NewToolResultText("milestone deleted successfully"), nil
+		}
+}
+
 // ListIssueTypes creates a tool to list defined issue types for an organization. This can be used to understand supported issue type values for creating or updating issues.
 func ListIssueTypes(getClient GetClientFn, t translations.TranslationHelperFunc) (tool mcp.Tool, handler server.ToolHandlerFunc) {
 
