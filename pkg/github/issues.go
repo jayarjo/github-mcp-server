@@ -206,6 +206,84 @@ func GetIssue(getClient GetClientFn, t translations.TranslationHelperFunc) (tool
 		}
 }
 
+// SearchMilestones creates a tool to search for milestones in a repository.
+func SearchMilestones(getClient GetClientFn, t translations.TranslationHelperFunc) (tool mcp.Tool, handler server.ToolHandlerFunc) {
+	return mcp.NewTool("search_milestones",
+			mcp.WithDescription(t("TOOL_SEARCH_MILESTONES_DESCRIPTION", "Search for milestones in a repository.")),
+			mcp.WithToolAnnotation(mcp.ToolAnnotation{
+				Title:        t("TOOL_SEARCH_MILESTONES_USER_TITLE", "Search milestones"),
+				ReadOnlyHint: ToBoolPtr(true),
+			}),
+			mcp.WithString("owner",
+				mcp.Required(),
+				mcp.Description("Repository owner"),
+			),
+			mcp.WithString("repo",
+				mcp.Required(),
+				mcp.Description("Repository name"),
+			),
+			mcp.WithString("query",
+				mcp.Required(),
+				mcp.Description("Search query to filter milestones by title or description"),
+			),
+			mcp.WithString("state",
+				mcp.Description("Filter by state"),
+				mcp.Enum("open", "closed", "all"),
+			),
+		),
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			owner, err := RequiredParam[string](request, "owner")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			repo, err := RequiredParam[string](request, "repo")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			query, err := RequiredParam[string](request, "query")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			state, err := OptionalParam[string](request, "state")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+
+			if state == "" {
+				state = "open"
+			}
+
+			opts := &github.MilestoneListOptions{
+				State: state,
+			}
+
+			client, err := getClient(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get GitHub client: %w", err)
+			}
+
+			allMilestones, _, err := client.Issues.ListMilestones(ctx, owner, repo, opts)
+			if err != nil {
+				return nil, fmt.Errorf("failed to list milestones: %w", err)
+			}
+
+			var filteredMilestones []*github.Milestone
+			for _, milestone := range allMilestones {
+				if (milestone.Title != nil && strings.Contains(strings.ToLower(*milestone.Title), strings.ToLower(query))) ||
+					(milestone.Description != nil && strings.Contains(strings.ToLower(*milestone.Description), strings.ToLower(query))) {
+					filteredMilestones = append(filteredMilestones, milestone)
+				}
+			}
+
+			r, err := json.Marshal(filteredMilestones)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal response: %w", err)
+			}
+
+			return mcp.NewToolResultText(string(r)), nil
+		}
+}
+
 // EditMilestone creates a tool to edit an existing milestone in a GitHub repository.
 func EditMilestone(getClient GetClientFn, t translations.TranslationHelperFunc) (tool mcp.Tool, handler server.ToolHandlerFunc) {
 	return mcp.NewTool("edit_milestone",
@@ -471,6 +549,100 @@ func DeleteMilestone(getClient GetClientFn, t translations.TranslationHelperFunc
 			}
 
 			return mcp.NewToolResultText("milestone deleted successfully"), nil
+		}
+}
+
+// ListMilestones creates a tool to list milestones for a repository.
+func ListMilestones(getClient GetClientFn, t translations.TranslationHelperFunc) (tool mcp.Tool, handler server.ToolHandlerFunc) {
+	return mcp.NewTool("list_milestones",
+			mcp.WithDescription(t("TOOL_LIST_MILESTONES_DESCRIPTION", "List milestones for a repository.")),
+			mcp.WithToolAnnotation(mcp.ToolAnnotation{
+				Title:        t("TOOL_LIST_MILESTONES_USER_TITLE", "List milestones"),
+				ReadOnlyHint: ToBoolPtr(true),
+			}),
+			mcp.WithString("owner",
+				mcp.Required(),
+				mcp.Description("Repository owner"),
+			),
+			mcp.WithString("repo",
+				mcp.Required(),
+				mcp.Description("Repository name"),
+			),
+			mcp.WithString("state",
+				mcp.Description("Filter by state"),
+				mcp.Enum("open", "closed", "all"),
+			),
+			mcp.WithString("sort",
+				mcp.Description("Sort field"),
+				mcp.Enum("due_on", "completeness"),
+			),
+			mcp.WithString("direction",
+				mcp.Description("Sort direction"),
+				mcp.Enum("asc", "desc"),
+			),
+			WithPagination(),
+		),
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			owner, err := RequiredParam[string](request, "owner")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			repo, err := RequiredParam[string](request, "repo")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			state, err := OptionalParam[string](request, "state")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			sort, err := OptionalParam[string](request, "sort")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			direction, err := OptionalParam[string](request, "direction")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			pagination, err := OptionalPaginationParams(request)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+
+			opts := &github.MilestoneListOptions{
+				State:     state,
+				Sort:      sort,
+				Direction: direction,
+				ListOptions: github.ListOptions{
+					Page:    pagination.Page,
+					PerPage: pagination.PerPage,
+				},
+			}
+
+			client, err := getClient(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get GitHub client: %w", err)
+			}
+
+			milestones, resp, err := client.Issues.ListMilestones(ctx, owner, repo, opts)
+			if err != nil {
+				return nil, fmt.Errorf("failed to list milestones: %w", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+
+			if resp.StatusCode != http.StatusOK {
+				body, err := io.ReadAll(resp.Body)
+				if err != nil {
+					return nil, fmt.Errorf("failed to read response body: %w", err)
+				}
+				return mcp.NewToolResultError(fmt.Sprintf("failed to list milestones: %s", string(body))), nil
+			}
+
+			r, err := json.Marshal(milestones)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal response: %w", err)
+			}
+
+			return mcp.NewToolResultText(string(r)), nil
 		}
 }
 

@@ -544,6 +544,11 @@ The following sets of tools are available (all are on by default):
   - `state`: Milestone state (string, required)
   - `title`: Milestone title (string, required)
 
+- **delete_milestone** - Delete milestone
+  - `milestone_number`: The number of the milestone to delete (number, required)
+  - `owner`: Repository owner (string, required)
+  - `repo`: Repository name (string, required)
+
 - **edit_milestone** - Edit milestone
   - `description`: New milestone description (string, optional)
   - `due_on`: New milestone due date in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ) (string, optional)
@@ -552,11 +557,6 @@ The following sets of tools are available (all are on by default):
   - `repo`: Repository name (string, required)
   - `state`: New milestone state (string, optional)
   - `title`: New milestone title (string, optional)
-
-- **delete_milestone** - Delete milestone
-  - `milestone_number`: The number of the milestone to delete (number, required)
-  - `owner`: Repository owner (string, required)
-  - `repo`: Repository name (string, required)
 
 - **get_issue** - Get issue details
   - `issue_number`: The number of the issue (number, required)
@@ -583,6 +583,15 @@ The following sets of tools are available (all are on by default):
   - `repo`: Repository name (string, required)
   - `since`: Filter by date (ISO 8601 timestamp) (string, optional)
   - `state`: Filter by state, by default both open and closed issues are returned when not provided (string, optional)
+
+- **list_milestones** - List milestones
+  - `direction`: Sort direction (string, optional)
+  - `owner`: Repository owner (string, required)
+  - `page`: Page number for pagination (min 1) (number, optional)
+  - `perPage`: Results per page for pagination (min 1, max 100) (number, optional)
+  - `repo`: Repository name (string, required)
+  - `sort`: Sort field (string, optional)
+  - `state`: Filter by state (string, optional)
 
 - **list_sub_issues** - List sub-issues
   - `issue_number`: Issue number (number, required)
@@ -613,6 +622,12 @@ The following sets of tools are available (all are on by default):
   - `query`: Search query using GitHub issues search syntax (string, required)
   - `repo`: Optional repository name. If provided with owner, only issues for this repository are listed. (string, optional)
   - `sort`: Sort field by number of matches of categories, defaults to best match (string, optional)
+
+- **search_milestones** - Search milestones
+  - `owner`: Repository owner (string, required)
+  - `query`: Search query to filter milestones by title or description (string, required)
+  - `repo`: Repository name (string, required)
+  - `state`: Filter by state (string, optional)
 
 - **update_issue** - Edit issue
   - `assignees`: New assignees (string[], optional)
